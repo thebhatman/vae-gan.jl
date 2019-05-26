@@ -37,7 +37,7 @@ encoder_mean = Chain(encoder_features, Dense(1024, 512))
 
 encoder_logsigma = Chain(encoder_features, Dense(1024, 512), x -> tanh.(x))
 
-
+encoder_latent(x) = encoder_mean(x) + randn(512, 512) * exp.(encoder_logsigma(x)./2) 
 
 decoder_generator = Chain(Dense(512, 32*8*28*28), 
 	x -> reshape(x, 28, 28, 256, :),
