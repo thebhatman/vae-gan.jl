@@ -19,11 +19,8 @@ data = gpu.(data)
 
 println(size(data))
 
-NUM_EPOCHS = 20
-channels = 128
-hidden_dim = 7 * 7 * channels
+NUM_EPOCHS = 50
 training_steps = 0
-verbose_freq = 100
 
 discriminator_eta = 0.0001f0
 generator_eta = 0.0001f0
