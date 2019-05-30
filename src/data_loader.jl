@@ -1,8 +1,10 @@
 using Base.Iterators: partition
+using Images
 
 function img_load(img_name)
     img = load(img_name)
-    img = Float64.(channelview(img))
+    img = imresize(img, 64, 64)
+    img = permutedims(Float64.(channelview(img)), [2, 3, 1])
     return img
 end
 
@@ -13,5 +15,11 @@ function load_dataset_as_batches(path, BATCH_SIZE)
         push!(data, img_load(img_path))
     end
     num_images = length(data)
-    return [reshape(hcat(data...), 64, 64, 3, num_images) for imgs in partition(imgs, BATCH_SIZE)]
-end 
+    #println(num_images)
+    batched_data = []
+    for x in partition(data, BATCH_SIZE)
+        x = reshape(hcat(x...), 64, 64, 3, BATCH_SIZE)
+        push!(batched_data, x)
+    end
+    return batched_data
+end

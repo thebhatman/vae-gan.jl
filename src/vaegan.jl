@@ -1,18 +1,23 @@
 using Flux, Flux.Data.MNIST, Statistics
-using Flux: throttle, params
-using Distributions
-import Distributions: logpdf
+using Flux: throttle, params, binarycrossentropy, crossentropy
 using NNlib: relu, leakyrelu
 using Base.Iterators: partition
 using Images: channelview
 
-imgs = MNIST.images()
+include("data_loader.jl")
+# imgs = MNIST.images()
 
-BATCH_SIZE = 128
+BATCH_SIZE = 512
+REAL_LABEL =  ones(1, BATCH_SIZE)
+FAKE_LABEL = zeros(1, BATCH_SIZE)
+#
+# data = [reshape(hcat(Array(channelview.(imgs))...), 28, 28, 1,:) for imgs in partition(imgs, BATCH_SIZE)]
+# data = gpu.(data)
 
-data = [reshape(hcat(Array(channelview.(imgs))...), 28, 28, 1,:) for imgs in partition(imgs, BATCH_SIZE)]
+data = load_dataset_as_batches("C:/Users/manju/Downloads/celeba-dataset/img_align_celeba/img_align_celeba/", BATCH_SIZE)
 data = gpu.(data)
 
+println(size(data))
 
 NUM_EPOCHS = 20
 channels = 128
@@ -63,7 +68,29 @@ discriminator_featuremap = Chain(Conv((5, 5), 3 => 64, leakyrelu, stride = (2, 2
 	# BatchNorm(256),
 	# x -> reshape(x, :, size(x, 4)))
 
-decoder = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)),
+discriminator = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)),
 	Dense(1024*4, 1), x -> sigmoid.(x))
 
+function auxiliary_Z(latent_vector)
+	return abs.(randn(size(latent_vector)...))
+end
+
 opt_encoder = ADAM(0.0003, (0.9, 0.999))
+function prior_loss(latent_vector, auxiliary_Z)
+	entropy = sum(latent_vector .* log.(latent_vector)) *1 //size(latent_vector,2)
+ 	cross_entropy = crossentropy(auxiliary_Z, latent_vector)
+ 	return entropy + cross_entropy
+end
+
+function discriminator_loss(reconstructed_data, sample_data, real_data, REAL_LABEL, FAKE_LABEL)
+	reconstruction_loss = binarycrossentropy(discriminator(reconstructed_data), FAKE_LABEL)
+	sampling_loss = binarycrossentropy(discriminator(sample_data), FAKE_LABEL)
+	real_loss = binarycrossentropy(discriminator(real_data), REAL_LABEL)
+	return reconstruction_loss + sampling_loss + real_loss
+end
+
+
+latent_vector = encoder_latent(X)
+Z_prior = auxiliary_Z(latent_vector)
+X_reconstructed = decoder_generator(latent_vector)
+X_fake = decoder_generator(Z_prior)
