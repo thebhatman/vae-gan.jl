@@ -21,6 +21,8 @@ println(size(data))
 
 NUM_EPOCHS = 50
 training_steps = 0
+GAMMA = 25
+BETA = 5
 
 discriminator_eta = 0.0001f0
 generator_eta = 0.0001f0
@@ -68,6 +70,8 @@ discriminator_featuremap = Chain(Conv((5, 5), 3 => 64, leakyrelu, stride = (2, 2
 discriminator = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)),
 	Dense(1024*4, 1), x -> sigmoid.(x))
 
+discriminator_similar = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)), Dense(1024*4, 1))
+
 function auxiliary_Z(latent_vector)
 	return abs.(randn(size(latent_vector)...))
 end
@@ -88,6 +92,20 @@ end
 
 
 latent_vector = encoder_latent(X)
+log_sigma = encoder_logsigma(X)
+enc_mean = encoder_mean(X)
 Z_prior = auxiliary_Z(latent_vector)
 X_reconstructed = decoder_generator(latent_vector)
-X_fake = decoder_generator(Z_prior)
+X_p = decoder_generator(Z_prior)
+
+x1 = discriminator(X_reconstructed)
+xp = discriminator(X_p)
+x_real = discriminator(X)
+
+x_sim = discriminator_similar(X_reconstructed)
+x_sim_real = discriminator_similar(X)
+
+reconstruction_loss = Flux.mse(x_sim, x_sim_real)
+decoder_loss = GAMMA * reconstruction_loss - discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL)
+
+encoder_loss = -0.5*(1 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/ (BATCH_SIZE*784) + BETA * reconstruction_loss
