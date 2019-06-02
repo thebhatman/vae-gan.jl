@@ -58,25 +58,26 @@ decoder_generator = Chain(Dense(512, 32*8*4*4),
 	ConvTranspose((4, 4), 32 => 3, relu, stride = (2, 2), pad = (1, 1)),
 	x -> tanh.(x))
 
-discriminator_featuremap = Chain(Conv((5, 5), 3 => 64, leakyrelu, stride = (2, 2), pad = (2, 2)),
+discriminator_similar = Chain(Conv((5, 5), 3 => 64, leakyrelu, stride = (2, 2), pad = (2, 2)),
 	Conv((5, 5), 64 => 128, leakyrelu, stride = (2, 2), pad = (2, 2)),
 	BatchNorm(128),
 	Conv((5, 5), 128 => 256, leakyrelu, stride = (2, 2), pad = (2, 2)),
 	BatchNorm(256),
 	Conv((5, 5), 256 => 256, leakyrelu, stride = (2, 2), pad = (2, 2)))
-	# BatchNorm(256),
-	# x -> reshape(x, :, size(x, 4)))
+	BatchNorm(256),
+	x -> reshape(x, :, size(x, 4)),
+	Dense(1024*4, 1))
 
-discriminator = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)),
-	Dense(1024*4, 1), x -> sigmoid.(x))
-
-discriminator_similar = Chain(discriminator_featuremap, BatchNorm(256), x -> reshape(x, :, size(x, 4)), Dense(1024*4, 1))
+discriminator = Chain(discriminator_similar, x -> sigmoid.(x))
 
 function auxiliary_Z(latent_vector)
 	return abs.(randn(size(latent_vector)...))
 end
 
 opt_encoder = ADAM(0.0003, (0.9, 0.999))
+opt_decgen = ADAM(0.0003, (0.9, 0.999))
+opt_discriminator = ADAM(0.0003, (0.9, 0.999))
+
 function prior_loss(latent_vector, auxiliary_Z)
 	entropy = sum(latent_vector .* log.(latent_vector)) *1 //size(latent_vector,2)
  	cross_entropy = crossentropy(auxiliary_Z, latent_vector)
@@ -90,22 +91,32 @@ function discriminator_loss(reconstructed_data, sample_data, real_data, REAL_LAB
 	return reconstruction_loss + sampling_loss + real_loss
 end
 
+function training(X)
+	latent_vector = encoder_latent(X)
+	log_sigma = encoder_logsigma(X)
+	enc_mean = encoder_mean(X)
+	Z_prior = auxiliary_Z(latent_vector)
+	X_reconstructed = decoder_generator(latent_vector)
+	X_p = decoder_generator(Z_prior)
 
-latent_vector = encoder_latent(X)
-log_sigma = encoder_logsigma(X)
-enc_mean = encoder_mean(X)
-Z_prior = auxiliary_Z(latent_vector)
-X_reconstructed = decoder_generator(latent_vector)
-X_p = decoder_generator(Z_prior)
+	x1 = discriminator(X_reconstructed)
+	xp = discriminator(X_p)
+	x_real = discriminator(X)
 
-x1 = discriminator(X_reconstructed)
-xp = discriminator(X_p)
-x_real = discriminator(X)
+	x_sim = discriminator_similar(X_reconstructed)
+	x_sim_real = discriminator_similar(X)
 
-x_sim = discriminator_similar(X_reconstructed)
-x_sim_real = discriminator_similar(X)
+	reconstruction_loss = Flux.mse(x_sim, x_sim_real)
+	decoder_loss = GAMMA * reconstruction_loss - discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL)
 
-reconstruction_loss = Flux.mse(x_sim, x_sim_real)
-decoder_loss = GAMMA * reconstruction_loss - discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL)
+	encoder_loss = -0.5*(1 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/ (BATCH_SIZE*784) + BETA * reconstruction_loss
 
-encoder_loss = -0.5*(1 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/ (BATCH_SIZE*784) + BETA * reconstruction_loss
+	gradients = Flux.Tracker.gradient(() -> discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL), params(discriminator))
+	update!(opt_discriminator, params(discriminator), gradients)
+
+	gradients = Flux.Tracker.gradient(decoder_loss, params(decoder_generator))
+	update!(opt_decgen, params(decoder_generator), gradients)
+
+	gradients = Flux.Tracker.gradient(encoder_loss, params(encoder_mean, encoder_logsigma))
+	update!(opt_encoder, params(encoder_mean, encoder_logsigma), gradients)
+end
