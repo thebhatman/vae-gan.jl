@@ -14,10 +14,10 @@ FAKE_LABEL = zeros(1, BATCH_SIZE)
 # data = [reshape(hcat(Array(channelview.(imgs))...), 28, 28, 1,:) for imgs in partition(imgs, BATCH_SIZE)]
 # data = gpu.(data)
 
-data = load_dataset_as_batches("C:/Users/manju/Downloads/celeba-dataset/img_align_celeba/img_align_celeba/", BATCH_SIZE)
-data = gpu.(data)
+train_data = load_dataset_as_batches("C:/Users/manju/Downloads/celeba-dataset/img_align_celeba/img_align_celeba/", BATCH_SIZE)
+train_data = gpu.(train_data)
 
-println(size(data))
+println(size(train_data))
 
 NUM_EPOCHS = 50
 training_steps = 0
@@ -63,7 +63,7 @@ discriminator_similar = Chain(Conv((5, 5), 3 => 64, leakyrelu, stride = (2, 2), 
 	BatchNorm(128),
 	Conv((5, 5), 128 => 256, leakyrelu, stride = (2, 2), pad = (2, 2)),
 	BatchNorm(256),
-	Conv((5, 5), 256 => 256, leakyrelu, stride = (2, 2), pad = (2, 2)))
+	Conv((5, 5), 256 => 256, leakyrelu, stride = (2, 2), pad = (2, 2)),
 	BatchNorm(256),
 	x -> reshape(x, :, size(x, 4)),
 	Dense(1024*4, 1))
@@ -120,3 +120,5 @@ function training(X)
 	gradients = Flux.Tracker.gradient(encoder_loss, params(encoder_mean, encoder_logsigma))
 	update!(opt_encoder, params(encoder_mean, encoder_logsigma), gradients)
 end
+
+training(train_data[1])
