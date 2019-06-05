@@ -1,5 +1,6 @@
 using Flux, Flux.Data.MNIST, Statistics
-using Flux: throttle, params, binarycrossentropy, crossentropy
+using Flux: Tracker, throttle, params, binarycrossentropy, crossentropy
+using Flux.Tracker: update!
 using NNlib: relu, leakyrelu
 using Base.Iterators: partition
 using Images: channelview
