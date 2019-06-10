@@ -22,8 +22,8 @@ println(size(train_data))
 
 NUM_EPOCHS = 50
 training_steps = 0
-GAMMA = 25
-BETA = 5
+GAMMA = Float32(25)
+BETA = Float32(5)
 
 discriminator_eta = 0.0001f0
 generator_eta = 0.0001f0
