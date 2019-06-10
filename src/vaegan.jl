@@ -118,14 +118,12 @@ end
 
 
 function training(X)
-	gradients = Flux.Tracker.gradient(() -> discriminator_loss(X), params(discriminator))
-	update!(opt_discriminator, params(discriminator), gradients)
-
-	gradients = Flux.Tracker.gradient(() -> decoder_loss(X), params(decoder_generator))
-	update!(opt_decgen, params(decoder_generator), gradients)
-
-	gradients = Flux.Tracker.gradient(() -> encoder_loss(X), params(encoder_mean, encoder_logsigma))
-	update!(opt_encoder, params(encoder_mean, encoder_logsigma), gradients)
+	gradient_dis = Flux.Tracker.gradient(() -> discriminator_loss(X), params(discriminator))
+	gradient_dec = Flux.Tracker.gradient(() -> decoder_loss(X), params(decoder_generator))
+	gradient_enc = Flux.Tracker.gradient(() -> encoder_loss(X), params(encoder_mean, encoder_logsigma))
+	update!(opt_discriminator, params(discriminator), gradient_dis)
+	update!(opt_decgen, params(decoder_generator), gradient_dec)
+	update!(opt_encoder, params(encoder_mean, encoder_logsigma), gradient_enc)
 
 	return discriminator_loss(X), decoder_loss(X), encoder_loss(X)
 end
@@ -134,6 +132,6 @@ end
 for epoch in 1:NUM_EPOCHS
 	println("-------- Epoch : $epoch ---------")
 	for X in train_data
-		training(X)
+		dis_loss, dec_loss, enc_loss = training(X)
 	end
 end
