@@ -85,38 +85,49 @@ function prior_loss(latent_vector, auxiliary_Z)
  	return entropy + cross_entropy
 end
 
-function discriminator_loss(reconstructed_data, sample_data, real_data, REAL_LABEL, FAKE_LABEL)
-	reconstruction_loss = binarycrossentropy(discriminator(reconstructed_data), FAKE_LABEL)
-	sampling_loss = binarycrossentropy(discriminator(sample_data), FAKE_LABEL)
-	real_loss = binarycrossentropy(discriminator(real_data), REAL_LABEL)
+function discriminator_loss(X)
+	latent_vector = encoder_latent(X)
+	X_reconstructed = decoder_generator(latent_vector)
+	Z_prior = auxiliary_Z(latent_vector)
+	X_p = decoder_generator(Z_prior)
+	reconstruction_loss = binarycrossentropy(discriminator(X_reconstructed), FAKE_LABEL)
+	sampling_loss = binarycrossentropy(discriminator(X_p), FAKE_LABEL)
+	real_loss = binarycrossentropy(discriminator(X), REAL_LABEL)
 	return reconstruction_loss + sampling_loss + real_loss
 end
 
-function training(X)
+function decoder_loss(X)
+	latent_vector = encoder_latent(X)
+	X_reconstructed = decoder_generator(latent_vector)
+	x_sim = discriminator_similar(X_reconstructed)
+	x_sim_real = discriminator_similar(X)
+	reconstruction_loss = Flux.mse(x_sim, x_sim_real)
+	return GAMMA * reconstruction_loss - discriminator_loss(X)
+end
+
+function encoder_loss(X)
 	latent_vector = encoder_latent(X)
 	log_sigma = encoder_logsigma(X)
 	enc_mean = encoder_mean(X)
-	Z_prior = auxiliary_Z(latent_vector)
 	X_reconstructed = decoder_generator(latent_vector)
-	X_p = decoder_generator(Z_prior)
-	x1 = discriminator(X_reconstructed)
-	xp = discriminator(X_p)
-	x_real = discriminator(X)
 	x_sim = discriminator_similar(X_reconstructed)
 	x_sim_real = discriminator_similar(X)
-
 	reconstruction_loss = Flux.mse(x_sim, x_sim_real)
-	decoder_loss = GAMMA * reconstruction_loss - discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL)
-	encoder_loss = -0.5*(1 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/ (BATCH_SIZE*784) + BETA * reconstruction_loss
+	return -0.5*(1 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/(BATCH_SIZE*784) + BETA * reconstruction_loss
+end
 
-	gradients = Flux.Tracker.gradient(() -> discriminator_loss(X_reconstructed, X_p, X, REAL_LABEL, FAKE_LABEL), params(discriminator))
+
+function training(X)
+	gradients = Flux.Tracker.gradient(() -> discriminator_loss(X), params(discriminator))
 	update!(opt_discriminator, params(discriminator), gradients)
 
-	gradients = Flux.Tracker.gradient(decoder_loss, params(decoder_generator))
+	gradients = Flux.Tracker.gradient(() -> decoder_loss(X), params(decoder_generator))
 	update!(opt_decgen, params(decoder_generator), gradients)
 
-	gradients = Flux.Tracker.gradient(encoder_loss, params(encoder_mean, encoder_logsigma))
+	gradients = Flux.Tracker.gradient(() -> encoder_loss(X), params(encoder_mean, encoder_logsigma))
 	update!(opt_encoder, params(encoder_mean, encoder_logsigma), gradients)
+
+	return discriminator_loss(X), decoder_loss(X), encoder_loss(X)
 end
 # println(size(train_data[1]))
 # training(train_data[1])
