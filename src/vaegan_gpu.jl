@@ -4,6 +4,7 @@ using Flux.Tracker: update!
 using NNlib: relu, leakyrelu
 using Base.Iterators: partition
 using Images: channelview
+using BSON: @save
 using CuArrays
 using CUDAnative:exp, log
 
@@ -122,6 +123,17 @@ function encoder_loss(X)
 	return -0.5f0 * sum(1.0f0 .+ log_sigma .- (enc_mean .* enc_mean) .- exp.(log_sigma))/(BATCH_SIZE*784) + BETA * reconstruction_loss
 end
 
+function save_weights(enc, dec_gen, disc)
+	enc = enc |> cpu
+	dec_gen = dec_gen |> cpu
+	disc = disc |> cpu
+	@save "../weights/enc.bson" enc
+	@save "../weights/dec_gen.bson" dec_gen
+	@save "../weights/disc" disc
+	enc = enc |> gpu
+	dec_gen = dec_gen |> gpu
+	disc = disc |> gpu
+end
 
 function training(X)
 	println("starting...")
@@ -141,9 +153,20 @@ function training(X)
 end
 # println(size(train_data[1]))
 # training(train_data[1])
-for epoch in 1:NUM_EPOCHS
-	println("-------- Epoch : $epoch ---------")
-	for X in train_data
-		dis_loss, dec_loss, enc_loss = training(X |> gpu)
+
+SAVE_FREQ = 800
+function train_all()
+	i = 0
+	for epoch in 1:NUM_EPOCHS
+		println("-------- Epoch : $epoch ---------")
+		for X in train_data
+			dis_loss, dec_loss, enc_loss = training(X |> gpu)
+			i += 1
+			if i % SAVE_FREQ
+				save_weights(encoder_mean, decoder_generator, discriminator)
+			end
+		end
 	end
 end
+
+train_all()
