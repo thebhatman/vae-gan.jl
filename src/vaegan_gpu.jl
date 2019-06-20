@@ -83,7 +83,10 @@ opt_encoder = ADAM(0.0003, (0.9, 0.999))
 opt_decgen = ADAM(0.0003, (0.9, 0.999))
 opt_discriminator = ADAM(0.0003, (0.9, 0.999))
 
-bce(y1, y) = -y * log(y1) - (1 - y)*log(1 - y1)
+function bce(ŷ, y)
+    mean(-y.*log.(ŷ) - (1  .- y .+ 1f-5).*log.(1 .- ŷ .+ 1f-5))
+end
+#bce(y1, y) = -y * log(y1) - (1 - y)*log(1 - y1)
 
 function prior_loss(latent_vector, auxiliary_Z)
 	entropy = sum(latent_vector .* log.(latent_vector)) *1 //size(latent_vector,2)
@@ -96,9 +99,9 @@ function discriminator_loss(X)
 	X_reconstructed = decoder_generator(latent_vector)
 	Z_prior = auxiliary_Z(latent_vector) |> gpu
 	X_p = decoder_generator(Z_prior)
-	reconstruction_loss = bce.(discriminator(X_reconstructed), FAKE_LABEL)
-	sampling_loss = bce.(discriminator(X_p), FAKE_LABEL)
-	real_loss = bce.(discriminator(X), REAL_LABEL)
+	reconstruction_loss = bce(discriminator(X_reconstructed), FAKE_LABEL)
+	sampling_loss = bce(discriminator(X_p), FAKE_LABEL)
+	real_loss = bce(discriminator(X), REAL_LABEL)
 	return mean(reconstruction_loss) + mean(sampling_loss) + mean(real_loss)
 end
 
